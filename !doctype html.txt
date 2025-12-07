@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Happy Birthday — Mini Game for Ghost</title>
+  <style>
+    :root{
+      --bg:#f6efe9;
+      --card:#fff;
+      --accent:#ff6b6b;
+      --muted:#6b6b6b;
+      --shadow: 0 8px 28px rgba(0,0,0,0.08);
+      --rounded:14px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,Arial,Helvetica,sans-serif;background:var(--bg);color:#111}
+    .wrap{min-height:100%;display:flex;align-items:center;justify-content:center;padding:28px}
+    .card{width:100%;max-width:520px;background:linear-gradient(180deg,var(--card),#fff);border-radius:var(--rounded);box-shadow:var(--shadow);padding:22px;text-align:center}
+    .gif{width:240px;max-width:85%;border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,0.06);display:block;margin:0 auto}
+    h1{font-size:20px;margin:12px 0 6px}
+    p.sub{color:var(--muted);margin:0 0 14px}
+    .controls{display:flex;gap:8px;justify-content:center;margin-bottom:12px;flex-wrap:wrap}
+    .btn{background:var(--accent);color:white;padding:10px 16px;border-radius:10px;border:none;font-weight:600;cursor:pointer;box-shadow:0 6px 14px rgba(255,107,107,0.18)}
+    .btn.outline{background:transparent;color:var(--accent);border:2px solid var(--accent)}
+    #gameArea{margin-top:12px;display:none}
+    canvas{display:block;margin:12px auto;background:#eaf0ff;border-radius:8px;image-rendering: pixelated}
+    .hud{display:flex;justify-content:space-between;padding:6px 20px;color:var(--muted);font-weight:600}
+    .hint{color:var(--muted);font-size:13px}
+    .result{margin-top:12px;display:none}
+    .foot{margin-top:18px;color:#b1b1b1;font-size:12px}
+
+    /* Secret Birthday Pop-Up */
+    .popup {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.65);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      z-index: 999;
+    }
+    .popup .box {
+      background: #fff;
+      padding: 24px;
+      border-radius: 14px;
+      max-width: 360px;
+      text-align: center;
+      font-family: Inter, system-ui;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+    }
+    .popup .box h3 {
+      margin: 0 0 10px;
+      font-size: 20px;
+      color: #ff6b6b;
+    }
+    .popup .box p {
+      font-size: 15px;
+      color: #444;
+      line-height: 1.5;
+    }
+    .popup .btn {
+      margin-top: 14px;
+    }
+
+    @media (max-width:420px){
+      .gif{width:180px}
+      h1{font-size:18px}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <img src="cute.gif" alt="Cute GIF" class="gif" id="gif">
+      <h1>Happy Birthday, Ghost 🎮</h1>
+      <p class="sub">From your IT girlfriend — play this mini-game to unlock your gift!</p>
+
+      <div class="controls">
+        <button id="startBtn" class="btn">Start Game</button>
+        <button id="shareBtn" class="btn outline">Share Link</button>
+      </div>
+
+      <div id="gameArea">
+        <canvas id="gameCanvas" width="320" height="420"></canvas>
+        <div class="hud"><span>Score: <span id="score">0</span></span><span>Time: <span id="time">30</span>s</span></div>
+        <p class="hint">Tap the pixel hearts! Get 20 before time runs out to receive your special message.</p>
+      </div>
+
+      <div id="result" class="result">
+        <h2 id="resultTitle"></h2>
+        <p id="resultText"></p>
+        <a id="playAgain" class="btn" href="#" style="text-decoration:none;display:inline-block;margin-top:8px">Play again</a>
+      </div>
+
+      <footer class="foot">
+        <small>Made with ♥ by your IT girlfriend.</small>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Secret Birthday Popup -->
+  <div id="secretPopup" class="popup">
+    <div class="box">
+      <h3>🎉 Happy Birthday, Ghost 🎉</h3>
+      <p>
+        You won the game!  
+        And here’s the real surprise:  
+        <br><br>
+        Thank you for being someone so special to me.  
+        I’m proud of you, grateful for you,  
+        and I hope this year brings you  
+        everything you’ve ever wished for.  
+        <br><br>
+        — From your IT girlfriend ❤️
+      </p>
+      <button class="btn" onclick="closePopup()">Close</button>
+    </div>
+  </div>
+
+  <script>
+  const startBtn = document.getElementById('startBtn');
+  const shareBtn = document.getElementById('shareBtn');
+  const gameArea = document.getElementById('gameArea');
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  const scoreEl = document.getElementById('score');
+  const timeEl = document.getElementById('time');
+  const resultEl = document.getElementById('result');
+  const resultTitle = document.getElementById('resultTitle');
+  const resultText = document.getElementById('resultText');
+  const playAgain = document.getElementById('playAgain');
+
+  let hearts = [];
+  let score = 0;
+  let timeLeft = 30;
+  let running = false;
+  const target = 20;
+  let spawnTimer = null;
+  let timerInterval = null;
+
+  function drawPixelHeart(x,y,size){
+    const s = size/8;
+    ctx.fillStyle = '#ff6b6b';
+    const matrix = [
+      [0,1,1,0,1,1,0,0],
+      [1,1,1,1,1,1,1,0],
+      [1,1,1,1,1,1,1,0],
+      [0,1,1,1,1,1,0,0],
+      [0,0,1,1,1,0,0,0],
+      [0,0,0,1,0,0,0,0]
+    ];
+    for(let r=0;r<matrix.length;r++){
+      for(let c=0;c<matrix[r].length;c++){
+        if(matrix[r][c]){
+          ctx.fillRect(x + c*s, y + r*s, s, s);
+        }
+      }
+    }
+  }
+
+  function spawnHeart(){
+    const size = 32;
+    const x = Math.random()*(canvas.width - size);
+    const y = Math.random()*(canvas.height - size - 40) + 20;
+    hearts.push({x,y,size});
+  }
+
+  function render(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle = '#eaf0ff';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    hearts.forEach(h => drawPixelHeart(h.x,h.y,h.size));
+    if(running) requestAnimationFrame(render);
+  }
+
+  canvas.addEventListener('click', function(e){
+    const rect = canvas.getBoundingClientRect();
+    const cx = e.clientX - rect.left;
+    const cy = e.clientY - rect.top;
+
+    for(let i = hearts.length -1; i>=0; i--){
+      const h = hearts[i];
+      if(cx >= h.x && cx <= h.x + h.size && cy >= h.y && cy <= h.y + h.size){
+        hearts.splice(i,1);
+        score++;
+        scoreEl.textContent = score;
+        for(let k=0;k<Math.floor(Math.random()*2)+1;k++) spawnHeart();
+        if(score >= target){
+          endGame(true);
+        }
+        break;
+      }
+    }
+  });
+
+  function startTimer(){
+    timeEl.textContent = timeLeft;
+    timerInterval = setInterval(()=>{
+      timeLeft--;
+      timeEl.textContent = timeLeft;
+      if(timeLeft <= 0){
+        endGame(false);
+      }
+    },1000);
+  }
+
+  function startGame(){
+    hearts = [];
+    score = 0;
+    timeLeft = 30;
+    scoreEl.textContent = score;
+    timeEl.textContent = timeLeft;
+    resultEl.style.display = 'none';
+    gameArea.style.display = 'block';
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    for(let i=0;i<6;i++) spawnHeart();
+
+    running = true;
+    render();
+    startTimer();
+
+    spawnTimer = setInterval(()=>spawnHeart(), 1400);
+    setTimeout(()=>clearInterval(spawnTimer), 28000);
+  }
+
+  function endGame(won){
+    running = false;
+    clearInterval(timerInterval);
+    clearInterval(spawnTimer);
+    gameArea.style.display = 'none';
+    resultEl.style.display = 'block';
+
+    if(won){
+      resultTitle.textContent = "You Win, Ghost! 🎉";
+      resultText.textContent = "You scored " + score + " points! Here's your surprise!";
+      showSecretMessage();
+    } else {
+      resultTitle.textContent = "Time’s Up ⏰";
+      resultText.textContent = "You got " + score + " points. Try again!";
+    }
+  }
+
+  function showSecretMessage(){
+    document.getElementById('secretPopup').style.display = 'flex';
+  }
+  function closePopup(){
+    document.getElementById('secretPopup').style.display = 'none';
+  }
+
+  startBtn.addEventListener('click', ()=> startGame());
+  playAgain.addEventListener('click', (e)=>{ e.preventDefault(); startGame(); });
+
+  shareBtn.addEventListener('click', async ()=>{
+    const url = location.href;
+    const shareData = {title:"Birthday Game for Ghost",text:"Try this cute mini-game!",url};
+    if(navigator.share){
+      try{ await navigator.share(shareData);}catch(e){}
+    } else {
+      navigator.clipboard.writeText(url);
+      alert("Link copied!");
+    }
+  });
+
+  document.getElementById('gif').addEventListener('click', ()=> startGame());
+  </script>
+</body>
+</html>
